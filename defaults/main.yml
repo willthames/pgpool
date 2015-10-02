@@ -1,0 +1,4 @@
+pgpool_port: 9999
+pgpool_pcp_port: 9898
+pgpool_wd_port: 9000
+pgpool_hb_port: 9694

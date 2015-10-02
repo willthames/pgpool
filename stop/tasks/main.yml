@@ -1,0 +1,2 @@
+- name: stop pgpool
+  service: name=pgpool state=stopped

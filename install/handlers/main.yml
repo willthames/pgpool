@@ -1,0 +1,10 @@
+- name: reload systemd
+  command: systemctl daemon-reload
+
+- name: restart pgpool
+  service: name=pgpool state=restarted enabled=yes
+
+- name: reload pgpool
+  command: systemctl reload pgpool.service
+  args:
+    warn: false

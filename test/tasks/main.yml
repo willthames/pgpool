@@ -1,0 +1,25 @@
+---
+- name: install needed packages
+  yum: name={{ item }} state=installed
+  with_items:
+    - psmisc # for killall
+    - python-httplib2 # for uri tests
+
+- name: make sure all postgres nodes are active
+  service: name=postgresql state=started enabled=yes
+
+  #- name: make sure all pgpool nodes are active
+  # service: name=pgpool state=started enabled=yes
+
+- name: tests for detaching pgpool hosts normally
+  include: test-pgpool-watchdog-normal.yml
+
+- name: tests for detaching posgtgres from pgpool normally
+  include: test-pgpool-pgsql-normal.yml
+
+- name: tests for detaching  detaching pgpool hosts abnormally
+  include: test-pgpool-watchdog-abnormal.yml
+
+- name: tests for detaching postgres from pgpool abnormally
+  include: test-pgpool-pgsql-abnormal.yml
+

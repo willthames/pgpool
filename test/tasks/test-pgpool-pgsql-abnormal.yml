@@ -1,0 +1,87 @@
+---
+- debug: msg="Starting Postgersql Abnormal Tests"
+  run_once: true
+
+- name: pgsql-abnormal *** reset roles
+  include: get-roles.yml gname=psqlan1
+
+- name: pgsql-abnormal *** kill postgres process on standby
+  command: killall -s9 postgres
+  when: inventory_hostname == groups['psqlan1_postgres_master_False'][0]
+
+- name: pqsql-abnormal *** pause
+  pause: seconds="{{10 * play_hosts|length}}"
+
+- name: pgsql-abnormal *** node report
+  command: pcp_node_info --verbose 10 localhost {{pgpool_pcp_port}} pgpool {{pgpool_pcp_password}} {{ pg_test_node }}
+  when: pgpool_active
+  register: node_report
+
+# 3 is offline
+- name: pgsql-abnormal *** test standby offline
+  fail: msg='standby is not offline'
+  when: "pgpool_active and 'Status  : 3' not in node_report.stdout"
+
+- name: pgsql-abnormal *** recover standby
+  command: pcp_recovery_node 10 localhost {{pgpool_pcp_port}} pgpool {{pgpool_pcp_password}} {{ pg_test_node }}
+  when: pgpool_active
+
+- name: pqsql-abnormal *** pause
+  pause: seconds=5
+
+# BUGBUG why doesn't the group work :(
+- include: "pgpool-refresh-db.yml"
+
+- name: pgsql-abnormal *** node report
+  command: pcp_node_info --verbose 10 localhost {{pgpool_pcp_port}} pgpool {{pgpool_pcp_password}} {{ pg_test_node }}
+  when: pgpool_active
+  register: node_report
+
+- name: pgsql-abnormal *** test standby online
+  fail: msg='standby is not online'
+  when: "pgpool_active and 'Status  : 3' in node_report.stdout"
+
+- name: pgsql-abnormal *** reset roles
+  include: get-roles.yml gname=psqlan2
+
+# Kill postgres service on master
+# pgpool will recover it as a standby
+- name: pgsql-abnormal *** mark old master
+  set_fact:
+     old_master_node: "{{ master_node_id }}"
+  when: pgpool_active
+
+- name: pgsql-abnormal *** kill  postgres process on master
+  command: killall -s9 postgres
+  when: inventory_hostname == groups['psqlan2_postgres_master_True'][0]
+
+- name: pqsql-abnormal *** pause
+  pause: seconds=5
+
+- name: pgsql-abnormal *** node report
+  command: pcp_master_node_id 10 localhost {{pgpool_pcp_port}} pgpool {{pgpool_pcp_password}}
+  when: pgpool_active
+  register: node_report
+
+- name: pgsql-abnormal *** test new master
+  fail: msg='master has not changed'
+  when: "pgpool_active and master_node_id == node_report.stdout"
+
+- name: pqsql-abnormal *** await tidy up
+  pause: seconds="{{10 * play_hosts|length}}"
+
+- include: "pgpool-refresh-db.yml"
+
+- name: pgsql-abnormal *** node report
+  command: pcp_node_info --verbose 10 localhost {{pgpool_pcp_port}} pgpool {{pgpool_pcp_password}} {{ old_master_node }}
+  when: pgpool_active
+  register: node_report
+
+- name: pgsql-abnormal *** test old master online
+  fail: msg='old master is not online'
+  when: "pgpool_active and 'Status  : 3' in node_report.stdout"
+
+# This will check if only one master is up
+- name: pgsql-abnormal *** reset roles
+  include: get-roles.yml gname=psqlan3
+

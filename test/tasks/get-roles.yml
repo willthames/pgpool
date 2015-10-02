@@ -1,0 +1,70 @@
+---
+# postgresql facts
+- set_fact:
+     postgres_master: false
+
+- name: get postgresql role
+  sudo_user: postgres
+  sudo: yes
+  command: psql -c "SELECT setting from pg_settings where name='transaction_read_only'" -t
+  register: is_postgres_master
+  always_run: true
+  changed_when: False
+
+- name: set postgresql master
+  set_fact:
+     postgres_master: true
+  when: is_postgres_master.stdout == " off"
+
+- group_by: key="{{ gname }}_postgres_master_{{postgres_master}}"
+
+#- debug : var=groups['{{ gname }}_postgres_master_True']
+
+#- debug : var=groups['{{ gname }}_postgres_master_True']|length
+
+- assert: { that: "groups['{{ gname }}_postgres_master_True']|length == 1" }
+
+# pgpool facts
+- set_fact:
+     pgpool_active: false
+
+- set_fact:
+     pg_test_node: 1
+
+- name: get pgpool active/standby status
+  shell: ip add list | grep {{ pgpool_delegate_IP }} | wc -l
+  register: is_pgpool_active
+  always_run: true
+  changed_when: False
+
+- name: set active pgpool node
+  set_fact:
+     pgpool_active: true
+  when: is_pgpool_active.stdout == "1"
+
+- group_by: key="{{ gname }}_pgpool_active_{{pgpool_active}}"
+
+#- debug : var=groups['{{ gname }}_pgpool_active_True']
+
+#- debug : var=groups['{{ gname }}_pgpool_active_False']
+
+- assert: { that: "groups['{{ gname }}_pgpool_active_True']|length == 1" }
+
+- name: get master node_id
+  shell: /usr/bin/pcp_master_node_id 10 localhost {{pgpool_pcp_port}} pgpool `cat /etc/pgpool-II/{{pgpool_pcp_password_file}}`
+  register: is_master_node_id
+  when: pgpool_active
+  always_run: true
+  changed_when: False
+
+- name: get master node_id
+  set_fact:
+     master_node_id: "{{ is_master_node_id.stdout }}"
+  when: pgpool_active
+
+- name: set pg test node
+  set_fact:
+     pg_test_node: 0
+  when: pgpool_active and master_node_id == "1"
+
+

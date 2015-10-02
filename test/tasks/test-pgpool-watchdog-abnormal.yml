@@ -1,0 +1,84 @@
+---
+- debug: msg="Starting PGPool Abnormal Tests"
+  run_once: true
+
+- name: watchdog-abnormal *** reset roles
+  include: get-roles.yml gname=pgpan1
+
+# Test killing a stand by node
+# D'oh list order and node order can be different :(
+- name: watchdog-abnormal *** get node id for test host IP
+  command: pcp_wd_node_id_4ip "{{ hostvars[groups['pgpan1_pgpool_active_False'][0]]['ansible_default_ipv4']['address'] }}" 10 localhost {{pgpool_pcp_port}} pgpool {{pgpool_pcp_password}}
+  when: pgpool_active
+  register: node_report
+
+- name: watchdog-abnormal *** Fail if no node for IP
+  fail: msg="can't find IP for node"
+  when: pgpool_active and node_report.stdout == ""
+
+- name: watchdog-abnormal *** set test node id
+  set_fact:
+     test_node_id: "{{ node_report.stdout }}"
+  when: pgpool_active
+
+- name: watchdog-abnormal *** kill -9 pgpool process on standby
+  command: killall -s9 pgpool
+  when: inventory_hostname == groups['pgpan1_pgpool_active_False'][0]
+
+- name: watchdog-abnormal *** pause
+  pause: seconds="{{10 * play_hosts|length}}"
+
+- name: watchdog-abnormal *** get pgpool status
+  command: pcp_watchdog_info --verbose 10 localhost {{pgpool_pcp_port}} pgpool {{pgpool_pcp_password}} {{ test_node_id }}
+  register: node_report
+  when: pgpool_active
+
+- name: watchdog-abnormal *** test standby offline
+  fail: msg='standby is not offline'
+  when: "pgpool_active and 'Status       : 4' not in node_report.stdout"
+
+- name: watchdog-abnormal *** Stanby node online
+  service: name=pgpool state=started enabled=yes
+  when: inventory_hostname == groups['pgpan1_pgpool_active_False'][0]
+
+# test killing the active node
+# Need to run this here as node order differs on each machine.
+- name: watchdog-abnormal *** get active node Id for test host
+  command: pcp_active_node_id 10 localhost {{pgpool_pcp_port}} pgpool {{pgpool_pcp_password}}
+  when: inventory_hostname == groups['pgpan1_pgpool_active_False'][0]
+  register: node_report
+
+- name: watchdog-abnormal *** Fail if no pgpool host is active
+  fail: msg='no pgpool host is active'
+  when: inventory_hostname == groups['pgpan1_pgpool_active_False'][0] and node_report.stdout == ""
+
+- name: watchdog-abnormal *** set active node id
+  set_fact: active_node_id="{{node_report.stdout}}"
+  when: inventory_hostname == groups['pgpan1_pgpool_active_False'][0]
+
+- name: watchdog-abnormal *** kill -9 pgpool process on active
+  command: killall -s9 pgpool
+  when: pgpool_active
+
+- name: watchdog-abnormal *** pause
+  pause: seconds="{{10 * play_hosts|length}}"
+
+- name: watchdog-abnormal *** active should be marked as off-line
+  command: pcp_watchdog_info --verbose 10 localhost {{pgpool_pcp_port}} pgpool {{pgpool_pcp_password}} {{ active_node_id }}
+  when: inventory_hostname == groups['pgpan1_pgpool_active_False'][0]
+  register: node_report
+
+- name: watchdog-abnormal *** test active offline
+  fail: msg='active is not offline'
+  when: "inventory_hostname == groups['pgpan1_pgpool_active_False'][0] and 'Status       : 4' not in node_report.stdout"
+
+- name: watchdog-abnormal *** former active node online
+  service: name=pgpool state=started enabled=yes
+  when: pgpool_active
+
+- name: watchdog-abnormal *** pause
+  pause: seconds=10
+
+- name: watchdog-abnormal *** reset roles
+  include: get-roles.yml  gname=pgpan2
+

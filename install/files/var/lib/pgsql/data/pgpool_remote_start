@@ -1,0 +1,8 @@
+#!/bin/sh
+
+REMOTE_HOST=$1
+REMOTE_PGDATA=$2
+
+logger --tag 'pgpool' "running pgpool_recover_start against $REMOTE_HOST"
+ssh -tt postgres@$REMOTE_HOST "sudo systemctl start postgresql"
+

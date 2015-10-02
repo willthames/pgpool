@@ -1,0 +1,22 @@
+#!/bin/sh
+
+# this is run on the PGPool active server
+
+STANDBY_NAME=$1    # %h
+MASTER_NAME=$2   # %H
+pcp_password=`cat {{pgpool_pcp_password_file}}`
+STANDBY_NODE=`/usr/bin/pcp_get_node_id_by_name 10 localhost {{pgpool_pcp_port}} pgpool $pcp_password $STANDBY_NAME`
+
+logger --tag 'pgpool' "running pgpool_follow_master for standby $STANDBY_NAME with master $MASTER_NAME"
+## Have to  stop and start as you can't reload during recovery
+ssh -tt postgres@$STANDBY_NAME "
+logger --tag 'pgpool' \"running pgpool_follow_master from $MASTER_NAME\"
+sudo systemctl stop postgresql;
+logger --tag 'pgpool' \"running pg_sync_master -m $MASTER_NAME\"
+/usr/bin/pg_sync_master -f -m $MASTER_NAME
+sudo systemctl start postgresql
+"
+
+
+pcp_attach_node 10 localhost {{pgpool_pcp_port}} pgpool $pcp_password $STANDBY_NODE;
+

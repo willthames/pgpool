@@ -1,0 +1,23 @@
+
+module postgresql-pgpool 1.0;
+
+require {
+	type ssh_exec_t;
+	type sudo_exec_t;
+	type rsync_exec_t;
+	type ifconfig_exec_t;
+	type postgresql_db_t;
+	type postgresql_t;
+	class file { read execute open getattr execute_no_trans };
+}
+
+#============= postgresql_t ==============
+allow postgresql_t ifconfig_exec_t:file { read execute open getattr execute_no_trans };
+
+allow postgresql_t postgresql_db_t:file execute;
+allow postgresql_t postgresql_db_t:file execute_no_trans;
+
+allow postgresql_t rsync_exec_t:file { getattr execute };
+allow postgresql_t ssh_exec_t:file execute;
+allow postgresql_t sudo_exec_t:file getattr;
+

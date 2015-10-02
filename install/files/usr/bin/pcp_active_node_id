@@ -1,0 +1,44 @@
+#!/bin/bash
+
+ME=$(basename $0)
+usage()
+{
+cat << EOF
+$ME - This script prints the watchdog node that this sysetms thinks is active.
+
+Usage: $ME [-d] timeout hostname port# username password
+Usage: $ME -h
+
+EOF
+}
+
+while getopts “h” OPTION
+do
+     case $OPTION in
+         h)
+             usage
+             exit 1
+             ;;
+         ?)
+             usage
+             exit
+             ;;
+     esac
+done
+
+if [ $# -lt 5 ]; then
+	usage;
+	exit 1;
+fi
+
+NUMNODES=`pcp_node_count $@`;
+MAXNODE=$(($NUMNODES - 2));
+
+for i in `seq 0 $MAXNODE`; do
+	TEXT=`pcp_watchdog_info --verbose $@ $i`;
+	if [[ "$TEXT" =~ "Status       : 3" ]]; then
+		echo "$i";
+		exit;
+	fi
+done;
+

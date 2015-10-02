@@ -1,0 +1,73 @@
+---
+- debug: msg="Starting Postgersql Normal Tests"
+  run_once: true
+
+- name: pgsql-normal *** get roles
+  include: get-roles.yml gname=psnt1
+
+- name: pgsql-normal *** Standby node off-line
+  command: pcp_detach_node 10 localhost {{pgpool_pcp_port}} pgpool {{pgpool_pcp_password}} {{ pg_test_node }}
+  when: pgpool_active
+
+- pause: seconds=5
+
+- name: pgsql-normal *** standby node report
+  command: pcp_node_info --verbose 10 localhost {{pgpool_pcp_port}} pgpool {{pgpool_pcp_password}} {{ pg_test_node }}
+  when: pgpool_active
+  register: node_report
+
+# 3 is offline
+- name: pgsql-normal *** test standby offline
+  fail: msg='standby is not offline'
+  when: "pgpool_active and 'Status  : 3' not in node_report.stdout"
+
+- name: pgsql-normal *** Standby node online
+  command: pcp_attach_node 10 localhost {{pgpool_pcp_port}} pgpool {{pgpool_pcp_password}} {{ pg_test_node }}
+  when: pgpool_active
+
+- name: pgsql-normal *** standby node report
+  command: pcp_node_info --verbose 10 localhost {{pgpool_pcp_port}} pgpool {{pgpool_pcp_password}} {{ pg_test_node }}
+  when: pgpool_active
+  register: node_report
+
+# test for status 3 as fail because status can be either 1 or 2
+# If we can hit the Bugzilla URL, or run psql via pgpool then it should be guranteed to be 2...
+- name: pgsql-normal *** test standby online
+  fail: msg='standby is not online'
+  when: "pgpool_active and 'Status  : 3' in node_report.stdout"
+
+- include: "pgpool-refresh-db.yml"
+
+- name: pgsql-normal *** master node report
+  command: pcp_node_info --verbose 10 localhost {{pgpool_pcp_port}} pgpool {{pgpool_pcp_password}} {{ master_node_id }}
+  when: pgpool_active
+
+# Test detaching Master, it should be demoted to a standby
+- name: pgsql-normal *** Master node offline
+  command: pcp_detach_node 10 localhost {{pgpool_pcp_port}} pgpool {{pgpool_pcp_password}} {{ master_node_id }}
+  when: pgpool_active
+
+# failover is taking 6 seconds per node right now
+- name: pgsql-normal *** pause
+  pause: seconds="{{10 * play_hosts|length}}"
+
+- name: pgsql-normal *** get current master
+  command: /usr/bin/pcp_master_node_id 10 localhost {{pgpool_pcp_port}} pgpool {{pgpool_pcp_password}}
+  register: is_master_node_id
+  when: pgpool_active
+
+- name: pgsql-normal *** test master has changed
+  fail: msg='master has not changed'
+  when: pgpool_active and master_node_id == is_master_node_id.stdout
+
+- include: "pgpool-refresh-db.yml"
+
+- name: pgsql-normal *** node report
+  command: pcp_node_info --verbose 10 localhost {{pgpool_pcp_port}} pgpool {{pgpool_pcp_password}} {{ master_node_id }}
+  when: pgpool_active
+  register: node_report
+
+- name: pgsql-normal *** test former master online
+  fail: msg='former master is not online'
+  when: "pgpool_active and 'Status  : 3' in node_report.stdout"
+

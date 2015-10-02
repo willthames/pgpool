@@ -1,0 +1,11 @@
+#!/bin/bash
+
+# this is run on the PostgreSQL master server
+
+MASTER_PGDATA=$1
+STANDBY_NAME=$2
+STANDBY_PGDATA=$3
+PORT=$4
+
+logger --tag 'pgpool' "running pgpool_recovery_1st_stage for standby $STANDBY_NAME"
+/usr/bin/pgpool_follow_master $STANDBY_NAME `hostname`

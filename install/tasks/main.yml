@@ -1,0 +1,80 @@
+---
+  # can't use defaults/main.yml for this as it clashes with postgresql/defaults/main.yml
+- name: set postgresql_data_directory if not already set
+  set_fact: postgresql_data_directory='{{postgresql_data_directory|default("/var/lib/pgsql/data")}}'
+  tags:
+  - always
+
+- name: install needed packages
+  yum: name={{ item }} state=installed
+  with_items:
+    - postgresql-pgpool-II{{ "-" ~ pgpool_version if pgpool_version is defined else "" }}
+    - postgresql-pgpool-II-extensions{{ "-" ~ pgpool_version if pgpool_version is defined else "" }}
+    - postgresql-contrib{{ "-" ~ postgresql_version if postgresql_version is defined else "" }}
+
+- name: create pgpool oid directory
+  file: state=directory owner=root group=root mode=0755 dest="{{pgpool_memqcache_oiddir}}"
+  when: pgpool_memory_cache_enabled|bool
+
+- name: install pgpool configuration files
+  template: src=etc/pgpool-II/{{item}}.j2 dest=/etc/pgpool-II/{{item}}
+  with_items:
+  - pgpool.conf
+  - pcp.conf
+  - pool_hba.conf
+  - pool_password
+  notify: reload pgpool
+  tags:
+  - core_config_updates
+  - enable_pg_users
+
+- name: install pgpool password file
+  template: src=etc/pgpool-II/pcp_password.j2 dest=/etc/pgpool-II/pcp_password mode=0600 owner=root group=root
+  tags:
+  - core_config_updates
+
+- name: copy pgpool systemd configuration
+  template: src=etc/systemd/system/pgpool.service.j2 dest=/etc/systemd/system/pgpool.service owner=root group=root mode=0755
+  notify: reload systemd
+
+- name: install pgpool sysconfig file
+  template: src=etc/sysconfig/pgpool.j2 dest=/etc/sysconfig/pgpool mode=0644 owner=root group=root
+  notify: reload systemd
+
+- name: pid directory
+  file: path=/var/run/pgpool owner=postgres group=postgres state=directory mode=0755
+
+- name: create or touch pgpool log file
+  file: path=/var/log/pgpool_status owner=postgres group=postgres mode=0660 state=touch
+
+- name: copy failover script
+  copy: src=usr/bin/{{item}} dest=/usr/bin/{{item}} owner=root group=root mode=0755
+  with_items:
+  - pcp_report
+  - pcp_master_node_id
+  - pcp_active_node_id
+  - pcp_clean_up
+  - pcp_node_id_4ip
+  - pcp_wd_node_id_4ip
+  - pcp_get_node_id_by_name
+
+- name: write templated failover script
+  template: src=usr/bin/{{item}}.j2 dest=/usr/bin/{{item}} owner=root group=root mode=0755
+  with_items:
+  - pgpool_failover
+  - pgpool_follow_master
+
+- name: copy remote start script
+  copy: src=var/lib/pgsql/data/pgpool_remote_start dest={{postgresql_data_directory}}/pgpool_remote_start owner=postgres group=postgres mode=0755 setype=postgresql_exec_t
+
+- name: copy recovery script
+  template: src=var/lib/pgsql/data/pgpool_recovery_1st_stage.j2 dest={{postgresql_data_directory}}/pgpool_recovery_1st_stage owner=postgres group=postgres mode=0755 setype=postgresql_exec_t
+
+- name: run pgpool
+  service: name=pgpool state=running enabled=yes
+
+- name: ensure ansible facts directory exists
+  file: state=directory path=/etc/ansible/facts.d
+
+- name: add ansible fact
+  copy: src=etc/ansible/facts.d/pgpool_active.fact dest=/etc/ansible/facts.d/pgpool_active.fact owner=root mode=0755

@@ -1,0 +1,72 @@
+#!/bin/bash
+
+ME=$(basename $0)
+usage()
+{
+cat << EOF
+$ME - This script prints a report for all base and watchdog hosts.
+
+Usage: $ME [-d] timeout hostname port# username password
+Usage: $ME -h
+
+EOF
+}
+
+while getopts “h” OPTION
+do
+     case $OPTION in
+         h)
+             usage
+             exit 1
+             ;;
+         ?)
+             usage
+             exit
+             ;;
+     esac
+done
+
+if [ $# -lt 5 ]; then
+	usage;
+	exit 1;
+fi
+
+NUMNODES=`pcp_node_count $@`;
+MAXNODE=$(($NUMNODES - 1));
+
+echo "## Databases ##"
+echo "status means: 
+    1 - Node is up. No connections yet.
+    2 - Node is up. Connections are pooled.
+    3 - Node is down.
+
+"
+for i in `seq 0 $MAXNODE`; do
+	echo "Database Node $i";
+	TEXT=`pcp_node_info --verbose $@ $i`;
+	echo "$TEXT";
+	DBIP=`echo $TEXT | grep -Po 'Hostname: [^\s,]*'| sed -e 's/Hostname: //'`;
+	MASTER=`su - postgres -c "psql -h $DBIP -c \"SELECT setting from pg_settings where name='transaction_read_only'\" -t"`;
+	if [[ "$MASTER" =~ "off" ]]; then
+		echo "Role	: Master";
+	else
+		echo "Role	: Standby";
+	fi
+	echo;
+done;
+
+echo "## Watchdogs ##"
+echo "status means: 
+    1 - watchdog is not started
+    2 - Standby: not holding the virtual IP
+    3 - Active: holding the virtual IP
+    4 - Down
+
+"
+
+for i in `seq 0 $(($MAXNODE - 1))`; do
+	echo "Watchdog Node $i";
+	pcp_watchdog_info --verbose $@ $i;
+	echo;
+done;
+

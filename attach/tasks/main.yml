@@ -1,0 +1,6 @@
+    - name: ensure node is attached to the cluster
+      command: pcp_attach_node 10 localhost  {{pgpool_pcp_port}} pgpool {{pgpool_pcp_password}} {{pgpool_db_hosts|indexof(inventory_hostname)}}
+      delegate_to: "{{pgpool_active_host|default(inventory_hostname)}}"
+
+    - name: wait 15 seconds for failover
+      pause: seconds=15

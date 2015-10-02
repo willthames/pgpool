@@ -1,0 +1,18 @@
+#!/bin/bash
+
+# this is run on the PGPool active server
+
+FAILED_NODE=$1          # %d
+OLD_MASTER_NODE=$2  # %M
+OLD_PRIMARY_NODE=$3 # %P
+NEW_MASTER_NODE=$4  # %m
+NEW_MASTER_NAME=$5  # %H
+FAILED_NAME=$6          # %h
+
+logger -t 'pgpool' "pgpool_failover failed_node=$1 old_master_node=$2 old_primary_node=$3 new_master_node=$4 new_master_name=$5 target_name=$6"
+if [ $FAILED_NODE = $OLD_PRIMARY_NODE ]; then
+    logger -t pgpool "pgpool_failover NEW_MASTER_NODE $NEW_MASTER_NAME"
+    ssh -tt postgres@$NEW_MASTER_NAME "/usr/bin/pg_ctl promote -D {{postgresql_data_directory}}"
+else
+    logger -t pgpool "pgpool_failover NOT_A_MASTER_NODE $NEW_MASTER_NAME"
+fi

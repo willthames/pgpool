@@ -1,0 +1,9 @@
+#!/bin/sh
+
+# Check for status = 2 only for false
+# Nodes with BackendError (e.g. watchdog not running) will get set to true
+if pcp_watchdog_info 10 localhost 9898 pgpool `cat /etc/pgpool-II/pcp_password` | grep -q "2$" ; then
+  echo "false"
+else
+  echo "true"
+fi

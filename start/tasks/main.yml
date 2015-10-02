@@ -1,0 +1,5 @@
+- name: start pgpool
+  service: name=pgpool state=started
+
+- name: wait for pgpool node to start
+  pause: seconds=15

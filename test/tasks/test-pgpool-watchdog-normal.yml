@@ -1,0 +1,72 @@
+---
+- debug: msg="Starting PGPool Normal Tests"
+  run_once: true
+
+- name: watchdog-normal *** reset roles
+  include: get-roles.yml gname=pgpn1
+
+- name: watchdog-normal *** Standby node off-line
+  service: name=pgpool state=stopped enabled=yes
+  when: inventory_hostname == groups['pgpn1_pgpool_active_False'][0]
+
+- name: watchdog-normal *** pause
+  pause: seconds=5
+
+- name: watchdog-normal *** get pgpool status
+  command: pcp_watchdog_info --verbose 10 localhost {{pgpool_pcp_port}} pgpool {{pgpool_pcp_password}} 0
+  register: node_report
+  when: pgpool_active
+
+- name: watchdog-normal *** test standby offline
+  fail: msg='standby is not offline'
+  when: "pgpool_active and 'Status       : 4' not in node_report.stdout"
+
+- name: watchdog-normal *** Standby node online
+  service: name=pgpool state=started enabled=yes
+  when: inventory_hostname == groups['pgpn1_pgpool_active_False'][0]
+
+- name: watchdog-normal *** pause
+  pause: seconds=5
+
+- name: watchdog-normal *** get pgpool status
+  command: pcp_watchdog_info --verbose 10 localhost {{pgpool_pcp_port}} pgpool {{pgpool_pcp_password}} 0
+  register: node_report
+  when: pgpool_active
+
+- name: watchdog-normal *** test standby online
+  fail: msg='standby is not online'
+  when: "pgpool_active and 'Status       : 3' in node_report.stdout"
+
+- name: watchdog-normal *** Active node off-line
+  service: name=pgpool state=stopped enabled=yes
+  when: pgpool_active
+
+- name: watchdog-normal *** pause
+  pause: seconds=15
+
+- name: watchdog-normal *** find out if old active still has floating IP
+  shell: ip add list | grep {{ pgpool_delegate_IP }} | wc -l
+  register: is_pgpool_active
+  when: pgpool_active
+
+- name: watchdog-normal *** fail if old active still has floating IP
+  fail: msg='format active node still has floating IP'
+  when: pgpool_active and is_pgpool_active.stdout != "0"
+
+- name: watchdog-normal *** reset roles
+  include: get-roles.yml gname=pgpn2
+
+- name: watchdog-normal *** reactivate old active node
+  service: name=pgpool state=started enabled=yes
+  register: result
+
+- name: watchdog-normal *** find out if old active has floating IP
+  shell: ip add list | grep {{ pgpool_delegate_IP }} | wc -l
+  register: is_pgpool_active
+  when: result|changed
+
+- name: watchdog-normal *** fail if old active has floating IP
+  fail: msg='format active node still has floating IP'
+  when: result|changed and is_pgpool_active.stdout != "0"
+
+

@@ -1,0 +1,46 @@
+#!/bin/bash
+
+ME=$(basename $0)
+usage()
+{
+cat << EOF
+$ME - This script prints the node id for the postgres master.
+
+Usage: $ME [-d] timeout hostname port# username password
+Usage: $ME -h
+
+EOF
+}
+
+while getopts “h” OPTION
+do
+     case $OPTION in
+         h)
+             usage
+             exit 1
+             ;;
+         ?)
+             usage
+             exit
+             ;;
+     esac
+done
+
+if [ $# -lt 5 ]; then
+	usage;
+	exit 1;
+fi
+
+NUMNODES=`pcp_node_count $@`;
+MAXNODE=$(($NUMNODES - 1));
+
+for i in `seq 0 $MAXNODE`; do
+	TEXT=`pcp_node_info --verbose $@ $i`;
+	DBIP=`echo $TEXT | grep -Po 'Hostname: [^\s,]*'| sed -e 's/Hostname: //'`;
+	MASTER=`su - postgres -c "psql -h $DBIP -c \"SELECT setting from pg_settings where name='transaction_read_only'\" -t"`;
+	if [[ "$MASTER" =~ "off" ]]; then
+		echo "$i";
+		exit;
+	fi
+done;
+

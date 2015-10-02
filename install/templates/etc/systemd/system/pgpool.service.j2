@@ -1,0 +1,14 @@
+.include /lib/systemd/system/pgpool.service
+
+[Unit]
+After=
+After=syslog.target network.target postgresql.target
+Wants=postgresql.target
+
+[Service]
+ExecStopPost=/usr/bin/pcp_clean_up
+ExecReload=/usr/bin/pgpool -f /etc/pgpool-II/pgpool.conf reload
+PIDFile={{pgpool_pid_file_name}}
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,5 @@
+- name: refresh pgpool
+  shell: psql -h {{pgpool_delegate_IP}} -p 9999 -U postgres -c 'select pg_is_in_recovery()'
+
+- name: refresh individual servers
+  shell: psql -U postgres -c 'select pg_is_in_recovery()'

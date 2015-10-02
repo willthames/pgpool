@@ -1,0 +1,45 @@
+#!/bin/bash
+
+ME=$(basename $0)
+usage()
+{
+cat << EOF
+$ME - This script cleans up the floating IP and stale sockets for pgpool.
+
+Usage: $ME
+Usage: $ME -h
+
+EOF
+}
+
+while getopts “h” OPTION
+do
+     case $OPTION in
+         h)
+             usage
+             exit 1
+             ;;
+         ?)
+             usage
+             exit
+             ;;
+     esac
+done
+
+if [ $# -ne 0 ]; then
+	usage;
+	exit 1;
+fi
+
+# if the ports are there nothing is attached delete them
+if test -n "$(find /tmp/ -maxdepth 1 -name '.s.PGSQL.9*' -print -quit)" &&  [[ `lsof -t /tmp/.s.PGSQL.9* | wc -l` == 0 ]]; then
+	rm -rf /tmp/.s.PGSQL.9*
+fi
+
+# if the delaget IP is assigned delete it
+DELIP=`grep delegate_IP /etc/pgpool-II/pgpool.conf | sed -e "s/^.*'\(.*\)'.*/\1/g"`;
+if [[ `ip a | grep -c $DELIP` > 0 ]]; then
+	IPFOWN=`grep if_down_cmd /etc/pgpool-II/pgpool.conf | sed -e "s/^.*'\(.*\)'.*/\1/g"`;
+	eval $IPFOWN;
+fi
+
